@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
 import { Camera, FileImage, Loader2, Sparkles, X, CheckCircle2 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || null; // e.g. http://localhost:3001/api
+
 const PROCESSING_STAGES = [
   'Gemma 4 compiling visual tokens...',
   'Preprocessing image channels...',
@@ -13,41 +15,84 @@ export function OmniboxPortal({ onCapture }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stage, setStage] = useState(0);
-  const [result, setResult] = useState(null); // 'success' | null
+  const [result, setResult] = useState(null); // 'success' | 'error' | null
+  const [errorMsg, setErrorMsg] = useState('');
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const stageTimerRef = useRef(null);
 
-  const simulateProcessing = (source) => {
+  // Advance processing stage labels while waiting for inference
+  const startStageAnimation = () => {
+    let s = 0;
+    stageTimerRef.current = setInterval(() => {
+      s = (s + 1) % PROCESSING_STAGES.length;
+      setStage(s);
+    }, 700);
+  };
+
+  const stopStageAnimation = () => {
+    clearInterval(stageTimerRef.current);
+  };
+
+  // POST to real backend if API_BASE is configured, else mock
+  const handleFile = async (file, source) => {
+    if (!file || isProcessing) return;
     setIsProcessing(true);
     setStage(0);
     setResult(null);
+    setErrorMsg('');
+    startStageAnimation();
 
-    let s = 0;
-    stageTimerRef.current = setInterval(() => {
-      s++;
-      if (s < PROCESSING_STAGES.length) {
-        setStage(s);
+    try {
+      if (API_BASE) {
+        // ── Real backend call ──────────────────────────────────────────────
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`${API_BASE}/ingestion`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const json = await res.json();
+        stopStageAnimation();
+        setIsProcessing(false);
+
+        if (json.ok) {
+          setResult('success');
+          onCapture?.({
+            source: json.parsed?.data_source_type === 'MPESA_SCREENSHOT' ? 'M-Pesa' : 'Meter Scan',
+            units: json.parsed?.remaining_units_kwh ?? 0,
+          });
+          setTimeout(() => setResult(null), 3000);
+        } else {
+          setResult('error');
+          setErrorMsg(json.message || 'Visual parsing failed.');
+          setTimeout(() => setResult(null), 4000);
+        }
       } else {
-        clearInterval(stageTimerRef.current);
+        // ── Mock simulation (no backend) ────────────────────────────────────
+        await new Promise((resolve) => setTimeout(resolve, PROCESSING_STAGES.length * 700));
+        stopStageAnimation();
         setIsProcessing(false);
         setResult('success');
         onCapture?.({ source, units: parseFloat((Math.random() * 80 + 20).toFixed(1)) });
         setTimeout(() => setResult(null), 3000);
       }
-    }, 700);
-  };
-
-  const handleFile = (file) => {
-    if (!file || isProcessing) return;
-    simulateProcessing('Upload');
+    } catch (err) {
+      stopStageAnimation();
+      setIsProcessing(false);
+      setResult('error');
+      setErrorMsg(err.message || 'Network error — backend may be offline.');
+      setTimeout(() => setResult(null), 4000);
+    }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    handleFile(file);
+    handleFile(file, 'Upload');
   };
 
   return (
@@ -100,6 +145,16 @@ export function OmniboxPortal({ onCapture }) {
           </div>
         )}
 
+        {/* Error flash */}
+        {result === 'error' && (
+          <div className="absolute inset-0 bg-red-950/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-2 animate-fade-in px-6">
+            <X className="w-10 h-10 text-red-400" />
+            <p className="text-sm font-semibold text-red-300 text-center leading-snug">
+              {errorMsg || 'Visual parsing failed.'}
+            </p>
+          </div>
+        )}
+
         <div className="p-5">
           <div className="text-center mb-4">
             <div className="flex items-center justify-center gap-2 mb-1">
@@ -115,7 +170,7 @@ export function OmniboxPortal({ onCapture }) {
           <div className="grid grid-cols-2 gap-3">
             {/* Camera Scan */}
             <button
-              onClick={() => { cameraInputRef.current?.click(); simulateProcessing('Meter Scan'); }}
+              onClick={() => cameraInputRef.current?.click()}
               className="group relative flex flex-col items-center gap-2.5 p-4 rounded-xl
                 bg-gradient-to-b from-emerald-500/10 to-emerald-500/5
                 border border-emerald-500/20 hover:border-emerald-400/40
@@ -135,7 +190,7 @@ export function OmniboxPortal({ onCapture }) {
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={(e) => handleFile(e.target.files[0])}
+                onChange={(e) => handleFile(e.target.files[0], 'Meter Scan')}
               />
             </button>
 
