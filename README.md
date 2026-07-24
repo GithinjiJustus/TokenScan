@@ -1,142 +1,220 @@
 # TokenScan
 
-TokenScan is a comprehensive crypto analytics platform designed to provide users with in-depth insights into token performance, transaction history, and market trends.
+> **KPLC Prepaid Electricity Utility Dashboard**  
+> AI-powered meter reading and real-time energy monitoring for Kenya Power (KPLC) prepaid customers.
 
-## 🚀 Features
+TokenScan lets you photograph your physical meter LCD or upload an M-Pesa payment screenshot. Gemma 4 Vision AI extracts the reading, commits it to a live ledger, and streams updates to your dashboard via Server-Sent Events — all in seconds.
 
-- **Token Search**: Instantly search for tokens by name, symbol, or contract address
-- **Token Analytics**: Detailed analytics including price charts, market cap, and trading volume
-- **Transaction History**: Comprehensive transaction history with filtering and search capabilities
-- **Holder Analysis**: Real-time holder tracking and distribution analysis
-- **Multi-Chain Support**: Support for multiple blockchain networks (initially Ethereum, with plans for more)
+---
+
+## ✨ Features
+
+- **AI Meter Reading** — Gemma 4 multimodal vision parses meter LCD photos and M-Pesa screenshots into structured data
+- **Real-Time Dashboard** — Live balance gauge, 7-day consumption trend chart, and transaction ledger updated over SSE
+- **Anomaly Detection** — Automatic alerts for consumption spikes (>2.5× daily average) and grid dropout events
+- **Firmware Upgrade Support** — Handles KPLC 3-token firmware upgrade sequences automatically
+- **Offline Resilience** — Frontend falls back to a built-in mock simulator when the backend is unavailable
+- **Error Recovery** — Visual parse failures (cracked screens, power outages) surface actionable error dialogs
+
+---
 
 ## 🛠️ Tech Stack
 
-### Frontend
-- **React**: UI library for building the user interface
-- **Tailwind CSS**: Utility-first CSS framework for styling
-- **TypeScript**: Type safety for the application
-- **Recharts**: Charting library for data visualization
+### Frontend — [`/frontend`](./frontend/README.md)
+- **React 18** — UI library
+- **Vite 5** — Dev server + bundler
+- **Tailwind CSS 3** — Utility-first styling
+- **Lucide React** — SVG icons
+- **`EventSource` (native)** — SSE client
 
-### Backend
-- **Node.js**: JavaScript runtime for the backend
-- **Express**: Web framework for building APIs
-- **MongoDB**: NoSQL database for storing token data
-- **Web3.js/Ethers.js**: Ethereum blockchain interaction
+### Backend — [`/backend`](./backend/README.md)
+- **Node.js (ESM)** — JavaScript runtime
+- **Express 4** — HTTP server + routing
+- **Gemma 4 (`gemma-4-27b-it`)** — Google AI multimodal vision model
+- **busboy** — Streaming multipart file parser
+- **In-memory ledger** — Zero-dependency stateful data store (swap for a DB in production)
+
+---
 
 ## 📂 Project Structure
 
 ```
 TokenScan/
-├── backend/      # Backend services and API
-│   ├── src/          # Source code for backend
-│   ├── config/       # Configuration files
-│   ├── migrations/   # Database migrations
-│   └── package.json  # Backend dependencies
+├── README.md                  # ← You are here
+├── .gitignore
 │
-├── frontend/     # Frontend application
-│   ├── public/       # Public assets
-│   ├── src/          # Source code for frontend
-│   │   ├── components/ # Reusable components
-│   │   ├── pages/      # Page components
-│   │   ├── services/   # API services
-│   │   └── App.tsx     # Main application component
-│   └── package.json  # Frontend dependencies
+├── backend/                   # Express API server
+│   ├── README.md              # Backend-specific docs
+│   ├── server.js              # Entry point — routes, SSE registry
+│   ├── app.js
+│   ├── .env.example
+│   ├── controllers/
+│   │   └── ingestion.js       # POST /api/ingestion handler
+│   ├── services/
+│   │   └── gemma.js           # Gemma 4 vision AI pipeline
+│   └── database/
+│       └── models/
+│           └── ledger.js      # In-memory energy ledger
 │
-├── README.md       # Project documentation
-└── package.json    # Root project dependencies (optional)
+└── frontend/                  # React + Vite SPA
+    ├── README.md              # Frontend-specific docs
+    ├── index.html
+    ├── vite.config.js
+    ├── tailwind.config.js
+    └── src/
+        ├── App.jsx            # Root component + state management
+        ├── main.jsx
+        ├── index.css
+        ├── components/
+        │   ├── Header.jsx
+        │   ├── OmniboxPortal.jsx   # Image capture & upload
+        │   ├── BalanceGauge.jsx    # Radial kWh gauge
+        │   ├── TrendChart.jsx      # 7-day consumption chart
+        │   ├── BillingTable.jsx    # Transaction ledger
+        │   └── ErrorModal.jsx      # Error & outage alerts
+        └── hooks/
+            └── useSSE.js           # SSE connection + mock fallback
 ```
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js (v16 or higher)
-- MongoDB (running locally or a connection string)
-- Yarn or npm
+- **Node.js v18+**
+- A **Google AI API key** with access to `gemma-4-27b-it`
 
-### Installation
+### 1. Clone the Repository
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd TokenScan
-   ```
+```bash
+git clone <repository-url>
+cd TokenScan
+```
 
-2. **Install backend dependencies**
-   ```bash
-   cd backend
-   npm install
-   ```
+### 2. Configure the Backend
 
-3. **Install frontend dependencies**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
+```bash
+cd backend
+npm install
+cp .env.example .env
+```
 
-### Configuration
+Edit `backend/.env`:
 
-1. **Environment variables**
-   Create a `.env` file in the `backend/` directory with the following variables:
-   ```env
-   PORT=5000
-   MONGO_URI=mongodb://localhost:27017/tokenscan
-   ETHEREUM_RPC_URL=https://mainnet.infura.io/v3/your-infura-project-id
-   ```
+```env
+GEMINI_API_KEY=your_google_ai_api_key_here
+PORT=3001
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:5173
+```
 
-   Create a `.env` file in the `frontend/` directory:
-   ```env
-   VITE_API_URL=http://localhost:5000/api
-   ```
+### 3. Configure the Frontend
 
-2. **Database setup**
-   Ensure MongoDB is running. The database will be created automatically on first run.
+```bash
+cd ../frontend
+npm install
+```
 
-### Running the Application
+Create `frontend/.env`:
 
-1. **Start the backend**
-   ```bash
-   cd backend
-   npm start
-   ```
+```env
+VITE_API_URL=http://localhost:3001/api
+```
 
-2. **Start the frontend**
-   ```bash
-   cd ../frontend
-   npm run dev
-   ```
+> **Tip:** Omit `VITE_API_URL` to run the frontend in mock simulation mode (no backend required).
 
-3. **Access the application**
-   Open [http://localhost:5173](http://localhost:5173) in your browser
+### 4. Start Both Servers
 
-## 📁 API Documentation
+**Terminal 1 — Backend:**
+```bash
+cd backend
+npm run dev
+# Server starts on http://localhost:3001
+```
 
-### Token Endpoints
+**Terminal 2 — Frontend:**
+```bash
+cd frontend
+npm run dev
+# App opens on http://localhost:5173
+```
 
-- `GET /api/tokens`: Get all tokens
-- `GET /api/tokens/:id`: Get token by ID
-- `GET /api/tokens/search?q=:query`: Search for tokens
+---
 
-### Transaction Endpoints
+## 📡 API Overview
 
-- `GET /api/tokens/:id/transactions`: Get transactions for a token
-- `GET /api/transactions/search?q=:query`: Search for transactions
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/ingestion` | Upload meter image → AI inference → ledger commit → SSE broadcast |
+| `GET` | `/api/events` | Open SSE stream — receives live dashboard updates |
+| `GET` | `/api/state` | Fetch current ledger state snapshot (REST fallback) |
+| `GET` | `/health` | Service health check |
 
-### Holder Endpoints
+→ Full API documentation: [`backend/README.md`](./backend/README.md)
 
-- `GET /api/tokens/:id/holders`: Get holders for a token
-- `GET /api/tokens/:id/analytics`: Get analytics for a token
+---
+
+## 📡 SSE Events
+
+| Event | Trigger |
+|---|---|
+| `state_snapshot` | Sent immediately on SSE connection — hydrates the UI |
+| `reading_committed` | Successful meter image ingestion |
+| `error_event` | Visual parse failure (blank screen, power outage) |
+| `anomaly_alert` | Consumption spike or unexpected balance drop to zero |
+
+---
+
+## 🏗️ How It Works
+
+```
+📸 User photographs meter
+        │
+        ▼
+┌── OmniboxPortal ──┐
+│  POST /api/ingestion (multipart image)
+└───────────────────┘
+        │
+        ▼
+┌── Gemma 4 Vision Pipeline ──────────────────────────────┐
+│  Phase 1: System guardrails (JSON-only output)          │
+│  Phase 2: Multimodal prompt (image + grid context)      │
+│  Phase 3: Schema-enforced JSON response                 │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌── In-Memory Ledger ─────────────────────────────────────┐
+│  Constraint validation → analytics → state commit       │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌── SSE Broadcast ────────────────────────────────────────┐
+│  reading_committed → all connected frontend clients     │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+📊 Dashboard updates live (gauge, chart, ledger)
+```
+
+---
+
+## 📖 Further Reading
+
+- [Backend README](./backend/README.md) — API reference, pipeline stages, environment variables
+- [Frontend README](./frontend/README.md) — Component API, hooks, data flow, mock simulation
+
+---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please follow these steps:
-
-1. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-2. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-3. Push to the branch (`git push origin feature/AmazingFeature`)
+1. Create a feature branch: `git checkout -b feature/my-feature`
+2. Commit your changes: `git commit -m 'feat: add my feature'`
+3. Push the branch: `git push origin feature/my-feature`
 4. Open a Pull Request
+
+---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE) for details.
