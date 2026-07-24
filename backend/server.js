@@ -14,7 +14,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { handleIngestion, injectSSEBroadcaster } from './controllers/ingestion.js';
-import { getStateSnapshot } from './database/models/ledger.js';
+import { getStateSnapshot, commitReading } from './database/models/ledger.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -105,6 +105,73 @@ app.get('/health', (_req, res) => {
 // ── Stage 2: Ingestion Endpoint ─────────────────────────────────────────────
 
 app.post('/api/ingestion', handleIngestion);
+
+// ── Mock Ingestion (no API key / no image required — for testing) ─────────────
+// Accepts a pre-parsed JSON body matching the Gemma RESPONSE_SCHEMA and feeds it
+// directly into the database + SSE pipeline, bypassing the AI vision step.
+//
+// POST /api/ingestion/mock
+// Body (JSON): { meter_serial_number, data_source_type, remaining_units_kwh,
+//               load_kilowatts, token_strings[], active_error_code }
+
+app.post('/api/ingestion/mock', async (req, res) => {
+  const parsed = { ...req.body };
+
+  // Basic shape check
+  const required = ['data_source_type', 'remaining_units_kwh', 'load_kilowatts'];
+  const missing = required.filter((k) => parsed[k] === undefined);
+  if (missing.length) {
+    return res.status(400).json({ ok: false, error: 'MISSING_FIELDS', missing });
+  }
+
+  // Coerce and sanitise
+  parsed.remaining_units_kwh = parseFloat(parsed.remaining_units_kwh);
+  parsed.load_kilowatts      = parseFloat(parsed.load_kilowatts ?? 0);
+  parsed.token_strings       = Array.isArray(parsed.token_strings) ? parsed.token_strings : [];
+  parsed.active_error_code   = parsed.active_error_code ?? null;
+  parsed.meter_serial_number = parsed.meter_serial_number ?? 'MOCK-UNKNOWN';
+
+  const context = {
+    session_id  : req.headers['x-session-id'] || `mock-${Date.now()}`,
+    captured_at : new Date().toISOString(),
+    received_at_ms: Date.now(),
+    meter_id_hint : parsed.meter_serial_number,
+    client_ip   : req.ip,
+    user_agent  : 'mock-test-client',
+  };
+
+  const dbResult = commitReading(parsed, context);
+
+  if (!dbResult.ok) {
+    return res.status(422).json({
+      ok: false,
+      error: dbResult.error,
+      violations: dbResult.violations,
+    });
+  }
+
+  // Broadcast to all connected SSE clients
+  broadcastToAll({ type: 'reading_committed', payload: dbResult.broadcast_payload });
+  if (dbResult.analytics.anomaly_detected) {
+    broadcastToAll({
+      type: 'anomaly_alert',
+      payload: {
+        message       : dbResult.analytics.anomaly_reason,
+        transaction_id: dbResult.transaction.id,
+        captured_at   : context.captured_at,
+      },
+    });
+  }
+
+  return res.status(200).json({
+    ok    : true,
+    _note : 'Mock ingestion — Gemma AI pipeline bypassed',
+    parsed,
+    transaction    : dbResult.transaction,
+    analytics      : dbResult.analytics,
+    state_snapshot : dbResult.state_snapshot,
+  });
+});
 
 // ── Stage 5: SSE Event Stream ────────────────────────────────────────────────
 
